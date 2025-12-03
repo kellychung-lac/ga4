@@ -386,11 +386,19 @@
         }
       }
 
+      // UPDATED: show 2 decimals for Avg session duration
       function formatValueAbsolute(rec) {
         if (!rec) return "—";
         const cfg = getMetricConfig(state.metric);
         const v = rec[cfg.key];
-        return Number.isFinite(v) ? Math.round(v).toLocaleString() : "—";
+
+        if (!Number.isFinite(v)) return "—";
+
+        if (state.metric === "Avg session duration") {
+          return v.toFixed(2); // keep 2 decimal places
+        }
+
+        return Math.round(v).toLocaleString();
       }
 
       function formatValuePct(info) {
@@ -626,6 +634,7 @@
         state.map.addControl(state.legend);
       }
 
+      // UPDATED: for Avg session duration, show 2 decimals in legend
       function updateLegend() {
         ensureLegend();
         const elTitle = document.getElementById("legend-title");
@@ -644,8 +653,14 @@
           }
 
           elTitle.textContent = `${state.metric} (log-scaled)`;
-          elMin.textContent   = Math.round(min).toLocaleString();
-          elMax.textContent   = Math.round(maxRaw).toLocaleString();
+
+          if (state.metric === "Avg session duration") {
+            elMin.textContent = min.toFixed(2);
+            elMax.textContent = maxRaw.toFixed(2);
+          } else {
+            elMin.textContent = Math.round(min).toLocaleString();
+            elMax.textContent = Math.round(maxRaw).toLocaleString();
+          }
 
           const scale = chroma.scale(["#f7fbff", "#08306b"]).domain([0,1]);
           elScale.style.background = sampleGradient(scale);
