@@ -103,15 +103,15 @@
       const EPS = 1e-9;
 
       const METRIC_CONFIG = {
-        "Page views": {
+        "Page Views": {
           key: "val_pv",
           rangeKey: "page_views",
-          label: "Page views"
+          label: "Page Views"
         },
-        "Avg session duration": {
+        "Avg Session Duration": {
           key: "val_dur",
           rangeKey: "avg_dur",
-          label: "Avg session duration"
+          label: "Avg Session Duration"
         },
         "Sessions": {
           key: "val_sess",
@@ -131,8 +131,8 @@
       };
 
       const METRIC_ORDER = [
-        "Page views",
-        "Avg session duration",
+        "Page Views",
+        "Avg Session Duration",
         "Sessions",
         "Users",
         "Transactions"
@@ -140,15 +140,15 @@
 
       // Default minimum volume thresholds for % diff shading (per city, in each range)
       const DEFAULT_THRESHOLDS = {
-        "Page views":           { min: 15 },
-        "Avg session duration": { min: 1 },
+        "Page Views":           { min: 15 },
+        "Avg Session Duration": { min: 1 },
         "Sessions":             { min: 5 },
         "Users":                { min: 5 },
         "Transactions":         { min: 1 }
       };
 
       function getMetricConfig(label) {
-        return METRIC_CONFIG[label] || METRIC_CONFIG["Page views"];
+        return METRIC_CONFIG[label] || METRIC_CONFIG["Page Views"];
       }
 
       // ---------- state ----------
@@ -164,7 +164,7 @@
         dateFromB: null, // pct range B
         dateToB:   null,
 
-        metric: "Page views",
+        metric: "Page Views",
 
         daily: null,            // json.daily  {date_iso: {city: metrics}}
         meta: null,             // json.meta {min_date, max_date}
@@ -195,6 +195,19 @@
           if (!base) {
             base = JSON.parse(JSON.stringify(DEFAULT_THRESHOLDS)); // deep copy
           }
+
+          // migrate any old-style keys to Title Case if present
+          const migrationMap = {
+            "Page views": "Page Views",
+            "Avg session duration": "Avg Session Duration"
+          };
+          for (const [oldKey, newKey] of Object.entries(migrationMap)) {
+            if (base[oldKey] && !base[newKey]) {
+              base[newKey] = base[oldKey];
+            }
+            delete base[oldKey];
+          }
+
           // ensure all metric keys exist
           for (const [k, def] of Object.entries(DEFAULT_THRESHOLDS)) {
             if (!base[k]) base[k] = { ...def };
@@ -429,7 +442,7 @@
         }
       }
 
-      // Show 2 decimals for Avg session duration
+      // Show 2 decimals for Avg Session Duration
       function formatValueAbsolute(rec) {
         if (!rec) return "—";
         const cfg = getMetricConfig(state.metric);
@@ -437,7 +450,7 @@
 
         if (!Number.isFinite(v)) return "—";
 
-        if (state.metric === "Avg session duration") {
+        if (state.metric === "Avg Session Duration") {
           return v.toFixed(2); // keep 2 decimal places
         }
 
@@ -722,7 +735,7 @@
         state.map.addControl(state.legend);
       }
 
-      // Avg session duration: show 2 decimals in legend
+      // Avg Session Duration: show 2 decimals in legend
       function updateLegend() {
         ensureLegend();
         const elTitle = document.getElementById("legend-title");
@@ -742,7 +755,7 @@
 
           elTitle.textContent = `${state.metric} (log-scaled)`;
 
-          if (state.metric === "Avg session duration") {
+          if (state.metric === "Avg Session Duration") {
             elMin.textContent = min.toFixed(2);
             elMax.textContent = maxRaw.toFixed(2);
           } else {
