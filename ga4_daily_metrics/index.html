@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>California Cities Heatmap</title>
+    <title>GA4 Daily Metrics - California</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -138,13 +138,13 @@
         "Transactions"
       ];
 
-      // Minimum volume thresholds for % diff shading (per city, in each range)
-      const THRESHOLDS = {
-        "Page views": { min: 15 },
+      // Default minimum volume thresholds for % diff shading (per city, in each range)
+      const DEFAULT_THRESHOLDS = {
+        "Page views":           { min: 15 },
         "Avg session duration": { min: 1 },
-        "Sessions": { min: 5 },
-        "Users": { min: 5 },
-        "Transactions": { min: 1 }
+        "Sessions":             { min: 5 },
+        "Users":                { min: 5 },
+        "Transactions":         { min: 1 }
       };
 
       function getMetricConfig(label) {
@@ -182,6 +182,25 @@
         legend: null,
         showLabels: true,
         includeLA: (localStorage.getItem("includeLA") ?? "true") === "true",
+
+        // dynamic thresholds per metric (loaded from localStorage or defaults)
+        thresholds: (() => {
+          let base = null;
+          try {
+            const saved = localStorage.getItem("ga4_thresholds_v1");
+            if (saved) base = JSON.parse(saved);
+          } catch (e) {
+            console.warn("Could not parse saved thresholds", e);
+          }
+          if (!base) {
+            base = JSON.parse(JSON.stringify(DEFAULT_THRESHOLDS)); // deep copy
+          }
+          // ensure all metric keys exist
+          for (const [k, def] of Object.entries(DEFAULT_THRESHOLDS)) {
+            if (!base[k]) base[k] = { ...def };
+          }
+          return base;
+        })(),
       };
 
       function baseDir() {
@@ -323,7 +342,10 @@
         const dictTo   = state.aggregatedTo   || {};
         const cfg = getMetricConfig(state.metric);
         const metricKey = cfg.key;
-        const thrCfg = THRESHOLDS[state.metric] || { min: 0 };
+
+        const thrCfg =
+          (state.thresholds && state.thresholds[state.metric]) ||
+          { min: 0 };
         const minVol = thrCfg.min ?? 0;
 
         const cities = new Set([...Object.keys(dictFrom), ...Object.keys(dictTo)]);
@@ -533,7 +555,18 @@
             html += `<label><input type="radio" name="mode" value="absolute" ${state.mode === 'absolute' ? 'checked' : ''}/> Absolute</label>`;
             html += `<label><input type="radio" name="mode" value="pct" ${state.mode === 'pct' ? 'checked' : ''}/> % Difference</label>`;
             html += '<hr/><div id="time-block">' + renderTimeControlsHTML() + '</div>';
-            html += '<div id="pct-note" class="note muted" style="display:none"></div>';
+
+            // pct-only block (note + thresholds)
+            const pctInitialDisplay = state.mode === 'pct' ? '' : 'none';
+            html += `<div id="pct-controls-block" style="display:${pctInitialDisplay};">`;
+            html += '<div id="pct-note" class="note muted"></div><br>';
+            html += '<h4>% Diff Min Volume</h4>';
+            html += '<div class="date-row">';
+            html += '  <span>Min</span>';
+            html += '  <input type="number" id="thr-input" name="thr" min="0" step="1" style="width:70px" />';
+            html += '</div>';
+            html += '<div class="muted">Applies to current metric in % mode.</div>';
+            html += '</div>'; // end pct-controls-block
             html += '<hr/>';
 
             html += '<h4>Metric</h4>';
@@ -552,28 +585,41 @@
 
             div.innerHTML = html;
 
-            function updatePctNote() {
-              const el = div.querySelector('#pct-note');
-              if (!el) return;
+            function updatePctUI() {
+              const note = div.querySelector('#pct-note');
+              const block = div.querySelector('#pct-controls-block');
+              const thrInput = div.querySelector('#thr-input');
+
               if (state.mode === 'pct') {
-                el.style.display = 'block';
-                el.innerHTML =
-                  '<b>NOTE: CITY SHADING IS NEUTRAL</b><br>' +
-                  'if either range has very low volume for a city.<br>' +
-                  'Approx thresholds (each range):<br>' +
-                  'Page views: ≥ 15<br>' +
-                  'Avg session duration: ≥ 1<br>' +
-                  'Sessions / Users: ≥ 5<br>' +
-                  'Transactions: ≥ 1.';
+                if (block) block.style.display = '';
+                const thrCfg =
+                  (state.thresholds && state.thresholds[state.metric]) ||
+                  { min: 0 };
+                if (note) {
+                  note.style.display = 'block';
+                  note.innerHTML =
+                    '<b>NOTE:</b> Shading is neutral if either range has low volume.<br>' +
+                    `Current minimum for <b>${state.metric}</b>: ${thrCfg.min}.`;
+                }
+                if (thrInput) {
+                  thrInput.disabled = false;
+                  thrInput.value = thrCfg.min;
+                }
               } else {
-                el.style.display = 'none';
-                el.textContent = '';
+                if (block) block.style.display = 'none';
+                if (note) {
+                  note.style.display = 'none';
+                  note.textContent = '';
+                }
+                if (thrInput) {
+                  thrInput.disabled = true;
+                }
               }
             }
 
             // After HTML is in place, sync any existing meta-driven dates
             syncAllDateInputs();
-            updatePctNote();
+            updatePctUI();
 
             div.addEventListener("change", async (e) => {
               if (e.target.name === "mode") {
@@ -581,12 +627,13 @@
                 const tb = div.querySelector("#time-block");
                 tb.innerHTML = renderTimeControlsHTML();
                 syncAllDateInputs();
-                updatePctNote();
+                updatePctUI();
                 refreshComputationAndRedraw();
               }
 
               if (e.target.name === "metric") {
                 state.metric = e.target.value;
+                updatePctUI();
                 refreshComputationAndRedraw();
               }
 
@@ -599,6 +646,26 @@
                 state.includeLA = e.target.value === "on";
                 localStorage.setItem("includeLA", state.includeLA);
                 await loadDataset();
+              }
+
+              // Threshold input (pct-only control)
+              if (e.target.name === "thr") {
+                const val = Number(e.target.value);
+                if (Number.isFinite(val) && val >= 0) {
+                  if (!state.thresholds[state.metric]) {
+                    state.thresholds[state.metric] = { min: val };
+                  } else {
+                    state.thresholds[state.metric].min = val;
+                  }
+                  try {
+                    localStorage.setItem("ga4_thresholds_v1", JSON.stringify(state.thresholds));
+                  } catch (err) {
+                    console.warn("Could not save thresholds", err);
+                  }
+                  if (state.mode === "pct") {
+                    refreshComputationAndRedraw();
+                  }
+                }
               }
 
               // Date inputs
@@ -640,7 +707,7 @@
       function ensureLegend() {
         if (state.legend) return;
         const Legend = L.Control.extend({
-          options: { position: "bottomright" },
+          options: { position: "bottomleft" },
           onAdd: function () {
             const div = L.DomUtil.create("div", "legend leaflet-bar");
             div.innerHTML = `
